@@ -18,6 +18,12 @@
     #answerButtons button:focus-visible, #nextBtn:focus-visible, #inlineNextBtn:focus-visible { outline: 3px solid #547a6c; outline-offset: 2px; }
     #nextBtn { height: 52px; background: #273b33; border-radius: 10px; font-size: 16px; }
     #questionCard { box-shadow:none; border-radius: 12px; }
+    .set-card { background:#fff; border:1px solid #e4e4e7; border-radius:12px; overflow:hidden; }
+    .set-card-main { display:block; width:100%; padding:16px 16px 10px; text-align:left; background:#fff; }
+    .set-card-main:hover { background:#fafafa; }
+    .set-card-footer { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0 16px 10px; color:#71717a; font-size:12px; }
+    .set-reset-button { padding:7px 10px; border:1px solid #d4d4d8; border-radius:8px; color:#3f3f46; font-size:12px; font-weight:700; background:white; }
+    .set-reset-button:focus-visible { outline:3px solid #547a6c; outline-offset:2px; }
     #feedbackBanner { border-width:1px; }
     #sessionNavTitle { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; font-weight:700; color:#444c47; margin-bottom:5px; }
     #sessionList { display:grid; grid-template-columns:repeat(auto-fill,minmax(62px,1fr)); gap:5px; max-height:94px; overflow-y:auto; overscroll-behavior:contain; padding:2px; }
@@ -206,7 +212,7 @@
       <div class="space-y-2">
         <div class="flex items-center justify-between px-1">
           <h2 class="text-xs font-bold text-zinc-500">問題集別（平針対策問題 1〜5）</h2>
-          <button onclick="openResetConfirm()" class="text-xs font-bold text-zinc-400 hover:text-rose-600 transition">履歴リセット</button>
+          <button onclick="openResetConfirm()" class="text-xs font-bold text-zinc-400 hover:text-rose-600 transition">すべてリセット</button>
         </div>
         <div id="setCardsContainer" class="space-y-2">
           <!-- JSで生成 -->
@@ -392,10 +398,10 @@
   </div>
 
   <!-- ==================== リセット確認モーダル ==================== -->
-  <div id="resetModal" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+  <div id="resetModal" role="dialog" aria-modal="true" aria-labelledby="resetTitle" aria-describedby="resetDescription" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
     <div class="bg-white w-full max-w-xs rounded-2xl p-5 text-center space-y-4">
-      <h3 class="font-black text-base text-zinc-900">学習履歴をリセットしますか？</h3>
-      <p class="text-xs font-medium text-zinc-500 leading-relaxed">これまでの正解・不正解の記録がすべて消去され、未回答の状態に戻ります。</p>
+      <h3 id="resetTitle" class="font-black text-base text-zinc-900">学習履歴をリセットしますか？</h3>
+      <p id="resetDescription" class="text-xs font-medium text-zinc-500 leading-relaxed">正解・不正解・迷った記録が消去され、未回答に戻ります。</p>
       <div class="grid grid-cols-2 gap-2.5">
         <button onclick="closeResetConfirm()" class="py-2.5 rounded-xl bg-zinc-100 hover:bg-zinc-200 font-bold text-xs text-zinc-700">キャンセル</button>
         <button onclick="executeReset()" class="py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 font-bold text-xs text-white">リセットする</button>
@@ -1076,9 +1082,12 @@
         const sDone = sCorrect + sWrong + qs.filter(q => progressMap[q.uid] === "unsure").length;
         const pct = Math.round((sDone / sTotal) * 100);
 
+        const wrapper = document.createElement("div");
+        wrapper.className = "set-card";
         const card = document.createElement("button");
+        card.type = "button";
         card.onclick = () => startQuiz(`set-${s}`);
-        card.className = "w-full btn-press bg-white hover:bg-zinc-50 border border-zinc-200 rounded-xl p-4 text-left block";
+        card.className = "set-card-main";
         card.innerHTML = `
           <div class="flex items-center justify-between gap-2 mb-1">
             <div class="flex items-center gap-2">
@@ -1094,7 +1103,19 @@
             <div class="h-full ${sDone === sTotal ? 'bg-emerald-600' : 'bg-zinc-800'} transition-all" style="width: ${pct}%"></div>
           </div>
         `;
-        container.appendChild(card);
+        const footer = document.createElement("div");
+        footer.className = "set-card-footer";
+        const hint = document.createElement("span");
+        hint.textContent = "タップして開始";
+        const reset = document.createElement("button");
+        reset.type = "button";
+        reset.className = "set-reset-button";
+        reset.textContent = "このセクションをリセット";
+        reset.setAttribute("aria-label", `平針対策問題 ${s} の履歴をリセット`);
+        reset.addEventListener("click", () => openResetConfirm(s));
+        footer.append(hint, reset);
+        wrapper.append(card, footer);
+        container.appendChild(wrapper);
       }
     }
 
@@ -1509,18 +1530,32 @@
     // =========================================================================
     // リセット＆トースト通知（alert不使用）
     // =========================================================================
-    function openResetConfirm() {
+    let resetTargetSet = null; // null は全問題
+    function openResetConfirm(setId = null) {
+      resetTargetSet = Number.isInteger(setId) && setId >= 1 && setId <= 5 ? setId : null;
+      document.getElementById("resetTitle").textContent = resetTargetSet === null
+        ? "すべての学習履歴をリセットしますか？"
+        : `平針対策問題 ${resetTargetSet} をリセットしますか？`;
+      document.getElementById("resetDescription").textContent = resetTargetSet === null
+        ? "すべての問題の正解・不正解・迷った記録を消去し、未回答に戻します。元には戻せません。"
+        : `問題 ${resetTargetSet} の正解・不正解・迷った記録だけを消去し、未回答に戻します。他の問題集の履歴は残ります。元には戻せません。`;
       document.getElementById("resetModal").classList.remove("hidden");
     }
     function closeResetConfirm() {
       document.getElementById("resetModal").classList.add("hidden");
+      resetTargetSet = null;
     }
     function executeReset() {
-      progressMap = {};
+      const setId = resetTargetSet;
+      if (setId === null) {
+        progressMap = {};
+      } else {
+        ALL_QUESTIONS.filter(q => q.setId === setId).forEach(q => { delete progressMap[q.uid]; });
+      }
       saveProgress();
       closeResetConfirm();
       updateHomeUI();
-      showToast("学習履歴をリセットしました");
+      showToast(setId === null ? "すべての履歴をリセットしました" : `問題 ${setId} の履歴をリセットしました`);
     }
 
     function showToast(msg) {
@@ -1537,5 +1572,5 @@
       updateHomeUI();
     });
   </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a603ea374dcfe381',t:'MTc5NTY0MzkwNw=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a603ea374dcfe381',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>
